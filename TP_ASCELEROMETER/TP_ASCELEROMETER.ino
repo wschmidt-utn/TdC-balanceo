@@ -9,14 +9,14 @@ float entrada = 0.0;
 float A = 0.0;
 
 //              X Accel  Y Accel  Z Accel   X Gyro   Y Gyro   Z Gyro
-#define OFFSETS   -272,   -1068,    1218,     166,      51,       8
+#define OFFSETS   -244,   -1038,    1224,     165,      50,       5
 
 #define MPU6050_DEFAULT_ADDRESS     MPU6050_ADDRESS_AD0_LOW	// por defecto AD0 en LOW
 
 #define PIN_MOTORA_ARRIBA 8
 #define PIN_MOTORA_ABAJO 9
-//#define PIN_MOTORB_ARRIBA 10
-//#define PIN_MOTORB_ABAJO 11
+#define PIN_MOTORB_ARRIBA 10
+#define PIN_MOTORB_ABAJO 11
 
 // mostrar_valores funcion que es llamada cada vez que hay datos disponibles desde el sensor
 void on_sensor_changes (int16_t *gyro, int16_t *accel, int32_t *quat, uint32_t *timestamp) {	
@@ -41,7 +41,7 @@ void on_sensor_changes (int16_t *gyro, int16_t *accel, int32_t *quat, uint32_t *
 
 void handle_motors(float roll, bool debug){
   float error = entrada - roll; // el error minimo es -65 y el máximo 65;
-  float G = 2;
+  float G = 10.5;
   //Si error = 0 => ambos deben ser 0.
   //Si error > 0 => encender motor A. 
   //Si error < 0 => encender motor B. 
@@ -53,36 +53,36 @@ void handle_motors(float roll, bool debug){
   int velocidad_objetivo = A * error;
 
   int velocidad = 0;
-  int velocidad_minima = 10;
+  int velocidad_minima = 20;
   int velocidad_maxima = 255;
   velocidad = velocidad_objetivo + velocidad_cero;
   int velocidad_derecha = 0;
   int velocidad_izquierda = 0;
   if (velocidad < -1) {
 
-    velocidad_izquierda = min(velocidad_maxima, max(0,20 + velocidad_minima - velocidad));
+    velocidad_izquierda = min(velocidad_maxima, max(0, velocidad_minima - velocidad));
 
     analogWrite(PIN_MOTORA_ARRIBA, 255);
-    //analogWrite(PIN_MOTORB_ABAJO, 255);
+    analogWrite(PIN_MOTORB_ABAJO, 255);
 
-    //analogWrite(PIN_MOTORB_ARRIBA, 255 - velocidad_izquierda);
+    analogWrite(PIN_MOTORB_ARRIBA, 255 - velocidad_izquierda);
     analogWrite(PIN_MOTORA_ABAJO, 255 - velocidad_izquierda);
 
   } else if (velocidad > 1) {
-s
+
     velocidad_derecha = min(velocidad_maxima, max(0,velocidad_minima + velocidad));
 
-    //analogWrite(PIN_MOTORB_ARRIBA, 255);
+    analogWrite(PIN_MOTORB_ARRIBA, 255);
     analogWrite(PIN_MOTORA_ABAJO, 255);
 
     analogWrite(PIN_MOTORA_ARRIBA, 255 - velocidad_derecha);
-    //analogWrite(PIN_MOTORB_ABAJO, 255 - velocidad_derecha);
+    analogWrite(PIN_MOTORB_ABAJO, 255 - velocidad_derecha);
 
   } else {    
     analogWrite(PIN_MOTORA_ARRIBA, 255);
-    //analogWrite(PIN_MOTORB_ABAJO, 255);
+    analogWrite(PIN_MOTORB_ABAJO, 255);
 
-    //analogWrite(PIN_MOTORB_ARRIBA, 255);
+    analogWrite(PIN_MOTORB_ARRIBA, 255);
     analogWrite(PIN_MOTORA_ABAJO, 255);
   }
 
@@ -125,19 +125,20 @@ void setup() {
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE	// activacion de bus I2C a 400 Khz
   Wire.begin();
   Wire.setClock(400000);
+  Wire.setWireTimeout(3000, true); //timeout value in uSec
 #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
   Fastwire::setup(400, true);
 #endif
   
-  Serial.begin(19200);			// inicializacion de monitor serie a 19200 bps
+  Serial.begin(115200);			// inicializacion de monitor serie a 19200 bps
   pinMode(PIN_MOTORA_ARRIBA,OUTPUT); 
   analogWrite(PIN_MOTORA_ARRIBA, 255);
-  //pinMode(PIN_MOTORB_ARRIBA,OUTPUT);
-  //analogWrite(PIN_MOTORB_ARRIBA, 255);
+  pinMode(PIN_MOTORB_ARRIBA,OUTPUT);
+  analogWrite(PIN_MOTORB_ARRIBA, 255);
   pinMode(PIN_MOTORA_ABAJO,OUTPUT); 
   analogWrite(PIN_MOTORA_ABAJO, 255);
-  //pinMode(PIN_MOTORB_ABAJO,OUTPUT);
-  //analogWrite(PIN_MOTORA_ABAJO, 255);
+  pinMode(PIN_MOTORB_ABAJO,OUTPUT);
+  analogWrite(PIN_MOTORB_ABAJO, 255);
   while (!Serial); 			// espera a enumeracion en caso de modelos con USB nativo
   Serial.println(F("Inicio:"));		// muestra texto estatico
 #ifdef OFFSETS								// si existen OFFSETS
@@ -157,8 +158,8 @@ void setup() {
 #endif
   mpu.on_FIFO(on_sensor_changes);		// llamado a funcion on_sensor_changes si memoria FIFO tiene valores
   Serial.println();
-  entrada = obtenerFloatDeConsola("entrada", -30.0, 30.0); 
-  A = obtenerFloatDeConsola("constante", 0.1, 5.0);
+  //entrada = obtenerFloatDeConsola("entrada", -30.0, 30.0); 
+  //A = obtenerFloatDeConsola("constante", 0, 5.0);
 }
 
 float obtenerFloatDeConsola(char* nombre_de_la_variable, float valor_minimo, float valor_maximo){
@@ -188,5 +189,6 @@ float obtenerFloatDeConsola(char* nombre_de_la_variable, float valor_minimo, flo
 }
 
 void loop() {
-  mpu.dmp_read_fifo();		// funcion que evalua si existen datos nuevos en el sensor y llama
-}				// a funcion mostrar_valores si es el caso
+  mpu.dmp_read_fifo();
+}
+
