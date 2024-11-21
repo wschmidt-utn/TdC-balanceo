@@ -199,6 +199,10 @@ void RevisarCambiosConfig(){
           velocidad_minima = RecibirFloatPorSerial(0.0, 100.0);
           Serial.print("Nuevo valor de velocidad minima: ");
           Serial.println(velocidad_minima);
+        } else if (receivedByte == 'A'){
+          A = RecibirFloatPorSerial(0.0, 100.0);
+          Serial.print("Nuevo valor amplificacion: ");
+          Serial.println(A);
         } else {
           Serial.println("Valor incorrecto");
         }
