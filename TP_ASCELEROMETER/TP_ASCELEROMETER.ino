@@ -7,9 +7,11 @@ Simple_MPU6050 mpu;				// Instancia libreria mpu
 int contador = 0;
 float entrada = 0.0;
 float A = 0.0;
+float G = 8.0;
+float velocidad_minima = 38.0;
 
 //              X Accel  Y Accel  Z Accel   X Gyro   Y Gyro   Z Gyro
-#define OFFSETS   -244,   -1038,    1224,     165,      50,       5
+#define OFFSETS   -328,   -1138,    1200,     166,      51,       7
 
 #define MPU6050_DEFAULT_ADDRESS     MPU6050_ADDRESS_AD0_LOW	// por defecto AD0 en LOW
 
@@ -41,24 +43,23 @@ void on_sensor_changes (int16_t *gyro, int16_t *accel, int32_t *quat, uint32_t *
 
 void handle_motors(float roll, bool debug){
   float error = entrada - roll; // el error minimo es -65 y el máximo 65;
-  float G = 10.5;
   //Si error = 0 => ambos deben ser 0.
   //Si error > 0 => encender motor A. 
   //Si error < 0 => encender motor B. 
 
   int angulo_cero = -roll;
 
-  int velocidad_cero = G * angulo_cero;
+  float velocidad_cero = G * angulo_cero;
 
-  int velocidad_objetivo = A * error;
+  float velocidad_objetivo = A * error;
 
-  int velocidad = 0;
-  int velocidad_minima = 20;
-  int velocidad_maxima = 255;
+  float velocidad = 0.0;
+  float velocidad_maxima = 255.0;
   velocidad = velocidad_objetivo + velocidad_cero;
   int velocidad_derecha = 0;
   int velocidad_izquierda = 0;
-  if (velocidad < -1) {
+  float tolerancia = 1.0;
+  if (velocidad < (-1 * tolerancia)) {
 
     velocidad_izquierda = min(velocidad_maxima, max(0, velocidad_minima - velocidad));
 
@@ -68,7 +69,7 @@ void handle_motors(float roll, bool debug){
     analogWrite(PIN_MOTORB_ARRIBA, 255 - velocidad_izquierda);
     analogWrite(PIN_MOTORA_ABAJO, 255 - velocidad_izquierda);
 
-  } else if (velocidad > 1) {
+  } else if (velocidad > tolerancia) {
 
     velocidad_derecha = min(velocidad_maxima, max(0,velocidad_minima + velocidad));
 
@@ -156,10 +157,11 @@ void setup() {
   while (Serial.available() && Serial.read()); 		// lecyura de monitor serie
   mpu.SetAddress(MPU6050_ADDRESS_AD0_LOW).CalibrateMPU().load_DMP_Image();	// inicializacion de sensor
 #endif
-  mpu.on_FIFO(on_sensor_changes);		// llamado a funcion on_sensor_changes si memoria FIFO tiene valores
   Serial.println();
   //entrada = obtenerFloatDeConsola("entrada", -30.0, 30.0); 
-  //A = obtenerFloatDeConsola("constante", 0, 5.0);
+  A = obtenerFloatDeConsola("constante", 0, 5.0);
+  mpu.on_FIFO(on_sensor_changes);		// llamado a funcion on_sensor_changes si memoria FIFO tiene valores
+
 }
 
 float obtenerFloatDeConsola(char* nombre_de_la_variable, float valor_minimo, float valor_maximo){
@@ -174,14 +176,7 @@ float obtenerFloatDeConsola(char* nombre_de_la_variable, float valor_minimo, flo
     Serial.println("): ");
     while (Serial.available() && Serial.read());		// lectura de monitor serie
     while (!Serial.available());   			// si no hay espera      
-    float lectura = Serial.parseFloat();
-    
-    Serial.println(lectura);
-    if (lectura < valor_minimo || lectura > valor_maximo){
-      Serial.println("Valor incorrecto");
-    } else {
-      retorno = lectura;
-    }   
+    retorno = RecibirFloatPorSerial(valor_minimo, valor_maximo);
     
   }
   
@@ -190,5 +185,30 @@ float obtenerFloatDeConsola(char* nombre_de_la_variable, float valor_minimo, flo
 
 void loop() {
   mpu.dmp_read_fifo();
+  RevisarCambiosConfig();
 }
 
+void RevisarCambiosConfig(){
+  if(Serial.available() > 0){
+        char receivedByte = Serial.read();
+        if (receivedByte == 'G'){
+          G = RecibirFloatPorSerial(0.0, 20.0);
+          Serial.print("Nuevo valor de gravedad: ");
+          Serial.println(G);
+        } else if (receivedByte == 'M'){
+          velocidad_minima = RecibirFloatPorSerial(0.0, 100.0);
+          Serial.print("Nuevo valor de velocidad minima: ");
+          Serial.println(velocidad_minima);
+        } else {
+          Serial.println("Valor incorrecto");
+        }
+  }
+}
+
+float RecibirFloatPorSerial(float valor_minimo, float valor_maximo){
+  float lectura = Serial.parseFloat();
+  if (lectura < valor_minimo || lectura > valor_maximo){
+    Serial.println("Valor incorrecto");
+  }
+  return lectura;
+}
