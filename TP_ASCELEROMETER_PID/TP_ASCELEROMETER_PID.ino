@@ -1,14 +1,17 @@
 #include "Simple_MPU6050.h"					// incluye libreria Simple_MPU6050
+#include <PID_v1.h>					// incluye libreria de PID
 #define MPU6050_ADDRESS_AD0_LOW     0x68			// direccion I2C con AD0 en LOW o sin conexion
 #define MPU6050_ADDRESS_AD0_HIGH    0x69			// direccion I2C con AD0 en HIGH
 #define MPU6050_DEFAULT_ADDRESS     MPU6050_ADDRESS_AD0_LOW	// por defecto AD0 en LOW
 
 Simple_MPU6050 mpu;				// Instancia libreria mpu
 int contador = 0;
-float entrada = 0.0;
-float A = 0.0;
-float G = 8.5;
-float velocidad_minima = 35.0;
+float entrada = 5.0;
+float velocidad_minima = 48.0;
+
+double consKp=10.5, consKi=0.05, consKd=0.1;
+double Setpoint, Input, Output;
+PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
 //              X Accel  Y Accel  Z Accel   X Gyro   Y Gyro   Z Gyro
 #define OFFSETS   -332,   -1118,    1196,     166,      53,       5
@@ -42,26 +45,18 @@ void on_sensor_changes (int16_t *gyro, int16_t *accel, int32_t *quat, uint32_t *
 }
 
 void handle_motors(float roll, bool debug){
-  float error = entrada - roll; // el error minimo es -65 y el máximo 65;
-  //Si error = 0 => ambos deben ser 0.
-  //Si error > 0 => encender motor A. 
-  //Si error < 0 => encender motor B. 
+  Input = roll;
+  double gap = abs(Setpoint-Input);
+  myPID.Compute();
 
-  int angulo_cero = -roll;
+  float tolerancia = 3;
+  float velocidad_izquierda = 0;
+  float velocidad_derecha = 0;
+  float velocidad_maxima = 255;
 
-  float velocidad_cero = G * angulo_cero;
+  if (Output < -tolerancia) {
 
-  float velocidad_objetivo = A * error;
-
-  float velocidad = 0.0;
-  float velocidad_maxima = 255.0;
-  velocidad = velocidad_objetivo + velocidad_cero;
-  int velocidad_derecha = 0;
-  int velocidad_izquierda = 0;
-  float tolerancia = G;
-  if (velocidad < (-1 * tolerancia)) {
-
-    velocidad_izquierda = min(velocidad_maxima, max(0, velocidad_minima - velocidad));
+    velocidad_izquierda = min(velocidad_maxima, max(0, velocidad_minima - Output));
 
     analogWrite(PIN_MOTORA_ARRIBA, 255);
     analogWrite(PIN_MOTORB_ABAJO, 255);
@@ -69,9 +64,9 @@ void handle_motors(float roll, bool debug){
     analogWrite(PIN_MOTORB_ARRIBA, 255 - velocidad_izquierda);
     analogWrite(PIN_MOTORA_ABAJO, 255 - velocidad_izquierda);
 
-  } else if (velocidad > tolerancia) {
+  } else if (Output > tolerancia) {
 
-    velocidad_derecha = min(velocidad_maxima, max(0,velocidad_minima + velocidad));
+    velocidad_derecha = min(velocidad_maxima, max(0,velocidad_minima + 20 + Output));
 
     analogWrite(PIN_MOTORB_ARRIBA, 255);
     analogWrite(PIN_MOTORA_ABAJO, 255);
@@ -88,21 +83,6 @@ void handle_motors(float roll, bool debug){
   }
 
   if (debug){
-    Serial.print("Error (Angulo respecto objetivo): ");
-    Serial.print(error);
-    Serial.println();
-
-    Serial.print("Angulo respecto al Cero: ");
-    Serial.print(angulo_cero);
-    Serial.println();
-
-    Serial.print("Velocidad hacia el Cero: ");
-    Serial.print(velocidad_cero);
-    Serial.println();
-
-    Serial.print("Velocidad Objetivo: ");
-    Serial.print(velocidad_objetivo);
-    Serial.println();
 
     if (velocidad_izquierda > 0){
       Serial.print("Velocidad Izquierda: ");
@@ -157,6 +137,10 @@ void setup() {
   while (Serial.available() && Serial.read()); 		// lecyura de monitor serie
   mpu.SetAddress(MPU6050_ADDRESS_AD0_LOW).CalibrateMPU().load_DMP_Image();	// inicializacion de sensor
 #endif
+  Setpoint = entrada;
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetOutputLimits(-255, 255);
+  myPID.SetSampleTime(1);
   Serial.println();
   //entrada = obtenerFloatDeConsola("entrada", -30.0, 30.0); 
   //A = obtenerFloatDeConsola("constante", 0, 5.0);
@@ -191,18 +175,30 @@ void loop() {
 void RevisarCambiosConfig(){
   if(Serial.available() > 0){
         char receivedByte = Serial.read();
-        if (receivedByte == 'G'){
-          G = RecibirFloatPorSerial(0.0, 20.0);
-          Serial.print("Nuevo valor de gravedad: ");
-          Serial.println(G);
+        if (receivedByte == 'P'){
+          consKp = RecibirFloatPorSerial(0.0, 20.0);
+          Serial.print("Nuevo valor de constante proporcional: ");
+          Serial.println(consKp);
+          myPID.SetTunings(consKp, consKi, consKd);
         } else if (receivedByte == 'M'){
           velocidad_minima = RecibirFloatPorSerial(0.0, 100.0);
           Serial.print("Nuevo valor de velocidad minima: ");
           Serial.println(velocidad_minima);
-        } else if (receivedByte == 'A'){
-          A = RecibirFloatPorSerial(0.0, 100.0);
-          Serial.print("Nuevo valor amplificacion: ");
-          Serial.println(A);
+        } else if (receivedByte == 'D'){
+          consKd = RecibirFloatPorSerial(0.0, 100.0);
+          Serial.print("Nuevo valor contante derivativa: ");
+          Serial.println(consKd);
+          myPID.SetTunings(consKp, consKi, consKd);
+        } else if (receivedByte == 'I'){
+          consKi = RecibirFloatPorSerial(0.0, 100.0);
+          Serial.print("Nuevo valor constante integrativa: ");
+          Serial.println(consKi);
+          myPID.SetTunings(consKp, consKi, consKd);
+        } else if (receivedByte == 'E'){
+          entrada = RecibirFloatPorSerial(0.0, 100.0);
+          Serial.print("Nuevo valor Entrada: ");
+          Serial.println(entrada);
+          Setpoint = entrada;
         } else {
           Serial.println("Valor incorrecto");
         }
